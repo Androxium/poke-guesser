@@ -88,7 +88,7 @@ async def on_ready():
 @bot.command(name='play')
 async def play(ctx):
 	get_new_pokemon()
-	await ctx.send(file=discord.File('whos-that-pokemon.png'))
+	await ctx.send('Who\'s that Pokemon?', file=discord.File('whos-that-pokemon.png'))
 
 
 @bot.command(name='reveal')

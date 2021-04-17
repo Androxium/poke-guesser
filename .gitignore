@@ -1,3 +1,4 @@
 *.png
 .env
 misc.txt
+*.pem
