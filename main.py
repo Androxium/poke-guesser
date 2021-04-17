@@ -18,7 +18,10 @@ POKEMON_URL = 'https://pokeapi.co/api/v2/pokemon/'
 MAX_POKEDEX_INDEX = 898
 SIGMA = 25
 
-pokemon_name = ""
+pokemon_name = ''
+generation = ''
+types = []
+hint_option = 0
 
 
 def debounce(wait):
@@ -48,16 +51,16 @@ def get_random_url():
 def apply_gaussian_blur(image_url, name):
 	# read and display original image
 	image = skimage.io.imread(fname=image_url)
-	skimage.io.imsave("pokemon.png", image)
+	skimage.io.imsave('pokemon.png', image)
 	# apply Gaussian blur, creating a new image
 	blurred = skimage.filters.gaussian(
 	    image, sigma=(SIGMA, SIGMA), truncate=3.5, multichannel=True)
-	skimage.io.imsave("whos-that-pokemon.png", blurred)
+	skimage.io.imsave('whos-that-pokemon.png', blurred)
 
 
 def apply_zoom_and_crop(image_url, name):
 	image = Image.open(requests.get(image_url, stream=True).raw)
-	image.save("pokemon.png")
+	image.save('pokemon.png')
 	width, height = image.size
 	center_x, center_y = width//2, height//2
 	min_dimension = min(width, height)
@@ -68,13 +71,16 @@ def apply_zoom_and_crop(image_url, name):
 	# top, left, right, bottom
 	cropped_image = image.crop((center_x-size, center_y-size, center_x+size, center_y+size))\
 			.resize((width,height), Image.ANTIALIAS)
-	cropped_image.save("whos-that-pokemon.png")
+	cropped_image.save('whos-that-pokemon.png')
 
 
 # throttle the ?play command to protect against spamming
 # @debounce(1.5)
 def get_new_pokemon():
 	global pokemon_name
+	global generation
+	global types
+	global hint_option
 
 	# make the get request to the pokeAPI
 	random_url = get_random_url()
@@ -83,8 +89,16 @@ def get_new_pokemon():
 
 	image_url = data['sprites']['other']['official-artwork']['front_default']
 	name = data['name']
+
+	print(name)
+
+	hint_option = 0
+	generation = data['game_indices'][0]['version']['name'] if len(data['game_indices']) > 0 else '???'
 	pokemon_name = name.lower()
-	print(pokemon_name)
+	types.clear()
+	for t in data['types']:
+		types.append(t['type']['name'].title())
+	
 
 	action = choice([True, False])
 	if action:
@@ -107,6 +121,26 @@ async def on_ready():
     print(
         f'{bot.user.name} is connected'
     )
+
+
+@bot.command(name='hint')
+async def hint(ctx):
+	global hint_option
+
+	if hint_option == 0:
+		await ctx.send('{}, This Pokemon first appeared in Pokemon {}'\
+			.format(ctx.message.author.mention, generation.title()))
+	elif hint_option == 1:
+		await ctx.send('{}, This Pokemon is a {} type'\
+			.format(ctx.message.author.mention, ', '.join(types)))
+	elif hint_option == 2:
+		await ctx.send('{}, The first letter is "{}"'\
+			.format(ctx.message.author.mention, pokemon_name[0]))
+	else:
+		await ctx.send('{} no more hints!'\
+			.format(ctx.message.author.mention))
+
+	hint_option += 1
 
 
 @bot.command(name='play')
