@@ -11,6 +11,7 @@ import requests
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+from threading import Timer
 
 
 POKEMON_URL = 'https://pokeapi.co/api/v2/pokemon/'
@@ -18,6 +19,25 @@ MAX_POKEDEX_INDEX = 898
 SIGMA = 25
 
 pokemon_name = ""
+
+
+def debounce(wait):
+    """ Decorator that will postpone a functions
+        execution until after wait seconds
+        have elapsed since the last time it was invoked. """
+    def decorator(fn):
+        def debounced(*args, **kwargs):
+            def call_it():
+                fn(*args, **kwargs)
+            try:
+                debounced.t.cancel()
+            except(AttributeError):
+                pass
+            debounced.t = Timer(wait, call_it)
+            debounced.t.start()
+        return debounced
+    return decorator
+
 
 def get_random_url():
 	p_id = random_integers(1,MAX_POKEDEX_INDEX)
@@ -51,6 +71,8 @@ def apply_zoom_and_crop(image_url, name):
 	cropped_image.save("whos-that-pokemon.png")
 
 
+# throttle the ?play command to protect against spamming
+# @debounce(1.5)
 def get_new_pokemon():
 	global pokemon_name
 
@@ -70,6 +92,8 @@ def get_new_pokemon():
 	else:
 		apply_gaussian_blur(image_url, name)
 
+	# return True
+
 	
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -86,25 +110,30 @@ async def on_ready():
 
 
 @bot.command(name='play')
-async def play(ctx):
-	get_new_pokemon()
-	await ctx.send('Who\'s that Pokemon?', file=discord.File('whos-that-pokemon.png'))
+async def play(ctx, *args):
+	if len(args) > 0:
+		await guess(ctx, args[0])
+	else:
+		get_new_pokemon()
+		await ctx.send('Who\'s that Pokemon?', file=discord.File('whos-that-pokemon.png'))
 
 
 @bot.command(name='reveal')
 async def reveal(ctx):
-	print(pokemon_name)
+	# print(pokemon_name)
 	await ctx.send('It\'s {}!'.format(pokemon_name),file=discord.File('pokemon.png'))
 
 
 @bot.command(name='guess')
 async def guess(ctx, arg):
 	arg = arg.strip().lower()
-	print(arg + ", " + pokemon_name)
+	# print(arg + ", " + pokemon_name)
 	if arg == pokemon_name:
-		await ctx.send('You guessed right!', file=discord.File('pokemon.png'))
+		await ctx.send('{} guessed right! It\'s {}!'\
+			.format(ctx.message.author.mention, pokemon_name),\
+		 	file=discord.File('pokemon.png'))
 	else:
-		await ctx.send('Nope, try again!')
+		await ctx.send('{} nope, try again!'.format(ctx.message.author.mention))
 
 
 bot.run(TOKEN)
