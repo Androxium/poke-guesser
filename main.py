@@ -19,29 +19,17 @@ POKEMON_URL = 'https://pokeapi.co/api/v2/pokemon/'
 MAX_POKEDEX_INDEX = 898
 SIGMA = 25
 
+# global variables
 pokemon_name = ''
 generation = ''
 types = []
 hint_option = 0
 has_been_revealed = False
-
-
-# def debounce(wait):
-#     """ Decorator that will postpone a functions
-#         execution until after wait seconds
-#         have elapsed since the last time it was invoked. """
-#     def decorator(fn):
-#         def debounced(*args, **kwargs):
-#             def call_it():
-#                 fn(*args, **kwargs)
-#             try:
-#                 debounced.t.cancel()
-#             except(AttributeError):
-#                 pass
-#             debounced.t = Timer(wait, call_it)
-#             debounced.t.start()
-#         return debounced
-#     return decorator
+size = 0
+x_axis = {'min': -1, 'max': -1}
+y_axis = {'min': -1, 'max': -1}
+num_of_crops = 0
+is_crop_mode = False
 
 
 def get_random_url():
@@ -60,20 +48,74 @@ def apply_gaussian_blur(image_url, name):
 	skimage.io.imsave('whos-that-pokemon.png', blurred)
 
 
-def apply_zoom_and_crop(image_url, name):
-	image = Image.open(requests.get(image_url, stream=True).raw)
-	image.save('pokemon.png')
+'''
+	Returns the cartesian quadrant crop center is in
+'''
+def which_quadrant(center_x, center_y, x, y):
+	if x >= center_x and y <= center_y:
+		return 1
+	elif x < center_x and y <= center_y:
+		return 2
+	elif x < center_x and y > center_y:
+		return 3
+	else:
+		return 4
+
+
+def update_samplable_image_regions(quadrant, x, y):
+	global x_axis
+	global y_axis
+	global size
+
+	if quadrant == 1:
+		x_axis['max'] = x
+		y_axis['min'] = y
+	elif quadrant == 2:
+		x_axis['min'] = x
+		y_axis['min'] = y
+	elif quadrant == 3:
+		x_axis['min'] = x
+		y_axis['max'] = y
+	else:
+		x_axis['max'] = x
+		y_axis['max'] = y
+
+
+
+def resample_crop_and_zoom():
+	global size
+	global x_axis
+	global y_axis
+
+	image = Image.open('pokemon.png')
 	width, height = image.size
-	center_x, center_y = width//2, height//2
-	min_dimension = min(width, height)
-	center_offset = random_integers(-min_dimension//4, min_dimension//4)
-	center_x += center_offset
-	center_y += center_offset
-	size = random_integers(min_dimension//11, min_dimension//8)
-	# top, left, right, bottom
-	cropped_image = image.crop((center_x-size, center_y-size, center_x+size, center_y+size))\
+	x = random_integers(x_axis['min'], x_axis['max'])
+	y = random_integers(y_axis['min'], y_axis['max'])
+	quadrant = which_quadrant(width//2, height//2, x, y)
+
+	update_samplable_image_regions(quadrant, x, y)
+	cropped_image = image.crop((x-size, y-size, x+size, y+size))\
 			.resize((width,height), Image.ANTIALIAS)
 	cropped_image.save('whos-that-pokemon.png')
+
+
+def apply_zoom_and_crop(image_url, name):
+	global size
+	global x_axis
+	global y_axis
+	global num_of_crops
+
+	image = Image.open(requests.get(image_url, stream=True).raw)
+	image.save('pokemon.png')
+
+	width, height = image.size
+	min_dimension = min(width, height)
+	size = random_integers(min_dimension//12, min_dimension//9)
+	x_axis = {'min': size, 'max': width-size}
+	y_axis = {'min': size, 'max': height-size}
+	num_of_crops = 0
+
+	resample_crop_and_zoom()
 
 
 def get_new_pokemon():
@@ -82,6 +124,7 @@ def get_new_pokemon():
 	global types
 	global hint_option
 	global has_been_revealed
+	global is_crop_mode
 
 	# make the get request to the pokeAPI
 	random_url = get_random_url()
@@ -104,8 +147,10 @@ def get_new_pokemon():
 
 	action = choice([True, False])
 	if action:
+		is_crop_mode = True
 		apply_zoom_and_crop(image_url, name)
 	else:
+		is_crop_mode = False
 		apply_gaussian_blur(image_url, name)
 
 	
@@ -117,10 +162,25 @@ client = discord.Client()
 
 @bot.event
 async def on_ready():
-    # guild = discord.utils.get(client.guilds, name=GUILD)
     print(
         f'{bot.user.name} is connected'
     )
+
+
+@bot.command(name='again')
+async def again(ctx):
+	global num_of_crops
+	global is_crop_mode
+
+	if is_crop_mode:
+		if num_of_crops < 3:
+			num_of_crops += 1
+			resample_crop_and_zoom()
+			await ctx.send('{} here\'s another crop'.format(ctx.message.author.mention),\
+				file=discord.File('whos-that-pokemon.png'))
+		else:
+			await ctx.send('{} no more!'\
+				.format(ctx.message.author.mention))
 
 
 @bot.command(name='hint')
@@ -143,8 +203,6 @@ async def hint(ctx):
 	hint_option += 1
 
 
-# limit the rate this function can be called to 1 per second
-# @throttle(rate_limit=1, period=1.0)
 @bot.command(name='play')
 async def play(ctx, *args):
 	if len(args) > 0:
@@ -162,7 +220,7 @@ async def reveal(ctx):
 	# print(pokemon_name)
 	global has_been_revealed
 	has_been_revealed = True
-	await ctx.send('It\'s {}!'.format(pokemon_name),file=discord.File('pokemon.png'))
+	await ctx.send('It\'s {}!'.format(pokemon_name.title()),file=discord.File('pokemon.png'))
 
 
 @bot.command(name='guess')
