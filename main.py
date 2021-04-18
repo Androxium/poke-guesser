@@ -11,7 +11,8 @@ import requests
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-from threading import Timer
+# from threading import Timer
+# from throttler import throttle
 
 
 POKEMON_URL = 'https://pokeapi.co/api/v2/pokemon/'
@@ -22,24 +23,25 @@ pokemon_name = ''
 generation = ''
 types = []
 hint_option = 0
+has_been_revealed = False
 
 
-def debounce(wait):
-    """ Decorator that will postpone a functions
-        execution until after wait seconds
-        have elapsed since the last time it was invoked. """
-    def decorator(fn):
-        def debounced(*args, **kwargs):
-            def call_it():
-                fn(*args, **kwargs)
-            try:
-                debounced.t.cancel()
-            except(AttributeError):
-                pass
-            debounced.t = Timer(wait, call_it)
-            debounced.t.start()
-        return debounced
-    return decorator
+# def debounce(wait):
+#     """ Decorator that will postpone a functions
+#         execution until after wait seconds
+#         have elapsed since the last time it was invoked. """
+#     def decorator(fn):
+#         def debounced(*args, **kwargs):
+#             def call_it():
+#                 fn(*args, **kwargs)
+#             try:
+#                 debounced.t.cancel()
+#             except(AttributeError):
+#                 pass
+#             debounced.t = Timer(wait, call_it)
+#             debounced.t.start()
+#         return debounced
+#     return decorator
 
 
 def get_random_url():
@@ -74,13 +76,12 @@ def apply_zoom_and_crop(image_url, name):
 	cropped_image.save('whos-that-pokemon.png')
 
 
-# throttle the ?play command to protect against spamming
-# @debounce(1.5)
 def get_new_pokemon():
 	global pokemon_name
 	global generation
 	global types
 	global hint_option
+	global has_been_revealed
 
 	# make the get request to the pokeAPI
 	random_url = get_random_url()
@@ -95,6 +96,7 @@ def get_new_pokemon():
 	hint_option = 0
 	generation = data['game_indices'][0]['version']['name'] if len(data['game_indices']) > 0 else '???'
 	pokemon_name = name.lower()
+	has_been_revealed = False
 	types.clear()
 	for t in data['types']:
 		types.append(t['type']['name'].title())
@@ -105,8 +107,6 @@ def get_new_pokemon():
 		apply_zoom_and_crop(image_url, name)
 	else:
 		apply_gaussian_blur(image_url, name)
-
-	# return True
 
 	
 load_dotenv()
@@ -128,14 +128,14 @@ async def hint(ctx):
 	global hint_option
 
 	if hint_option == 0:
-		await ctx.send('{}, This Pokemon first appeared in Pokemon {}'\
+		await ctx.send('{} this Pokemon first appeared in Pokemon {}'\
 			.format(ctx.message.author.mention, generation.title()))
 	elif hint_option == 1:
-		await ctx.send('{}, This Pokemon is a {} type'\
+		await ctx.send('{} this Pokemon is a {} type'\
 			.format(ctx.message.author.mention, ', '.join(types)))
 	elif hint_option == 2:
-		await ctx.send('{}, The first letter is "{}"'\
-			.format(ctx.message.author.mention, pokemon_name[0]))
+		await ctx.send('{} the first letter is "{}"'\
+			.format(ctx.message.author.mention, pokemon_name[0].title()))
 	else:
 		await ctx.send('{} no more hints!'\
 			.format(ctx.message.author.mention))
@@ -143,28 +143,37 @@ async def hint(ctx):
 	hint_option += 1
 
 
+# limit the rate this function can be called to 1 per second
+# @throttle(rate_limit=1, period=1.0)
 @bot.command(name='play')
 async def play(ctx, *args):
 	if len(args) > 0:
 		await guess(ctx, args[0])
-	else:
+	elif has_been_revealed or not pokemon_name:
 		get_new_pokemon()
 		await ctx.send('Who\'s that Pokemon?', file=discord.File('whos-that-pokemon.png'))
+	else:
+		await ctx.send('{} guess the Pokemon first or reveal to move on'\
+			.format(ctx.message.author.mention))
 
 
 @bot.command(name='reveal')
 async def reveal(ctx):
 	# print(pokemon_name)
+	global has_been_revealed
+	has_been_revealed = True
 	await ctx.send('It\'s {}!'.format(pokemon_name),file=discord.File('pokemon.png'))
 
 
 @bot.command(name='guess')
 async def guess(ctx, arg):
+	global has_been_revealed
 	arg = arg.strip().lower()
 	# print(arg + ", " + pokemon_name)
 	if arg == pokemon_name:
+		has_been_revealed = True
 		await ctx.send('{} guessed right! It\'s {}!'\
-			.format(ctx.message.author.mention, pokemon_name),\
+			.format(ctx.message.author.mention, pokemon_name.title()),\
 		 	file=discord.File('pokemon.png'))
 	else:
 		await ctx.send('{} nope, try again!'.format(ctx.message.author.mention))
