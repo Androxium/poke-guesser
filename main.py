@@ -1,6 +1,6 @@
 import os
-from numpy import uint8
-from numpy.random import random_integers, choice
+from numpy import uint8, arange, delete
+from numpy.random import randint, choice
 # this import is for image cropping
 from PIL import Image
 # this import is for Gaussian blurring
@@ -30,10 +30,24 @@ x_axis = {'min': -1, 'max': -1}
 y_axis = {'min': -1, 'max': -1}
 num_of_crops = 0
 is_crop_mode = False
+not_seen_pokemon = []
+
+
+def reset_guessed_pokemon():
+	global not_seen_pokemon
+
+	not_seen_pokemon = arange(1, MAX_POKEDEX_INDEX+1)
 
 
 def get_random_url():
-	p_id = random_integers(1,MAX_POKEDEX_INDEX)
+	global not_seen_pokemon
+
+	remaining_pokemon = len(not_seen_pokemon)
+	if remaining_pokemon == 0:
+		reset_guessed_pokemon()
+	p_id_idx = randint(0,len(not_seen_pokemon))
+	p_id = not_seen_pokemon[p_id_idx]
+	not_seen_pokemon = delete(not_seen_pokemon, p_id_idx)
 	random_url = POKEMON_URL + str(p_id)
 	return random_url
 
@@ -89,8 +103,8 @@ def resample_crop_and_zoom():
 
 	image = Image.open('pokemon.png')
 	width, height = image.size
-	x = random_integers(x_axis['min'], x_axis['max'])
-	y = random_integers(y_axis['min'], y_axis['max'])
+	x = randint(x_axis['min'], x_axis['max']+1)
+	y = randint(y_axis['min'], y_axis['max']+1)
 	quadrant = which_quadrant(width//2, height//2, x, y)
 
 	update_samplable_image_regions(quadrant, x, y)
@@ -110,7 +124,7 @@ def apply_zoom_and_crop(image_url, name):
 
 	width, height = image.size
 	min_dimension = min(width, height)
-	size = random_integers(min_dimension//12, min_dimension//9)
+	size = randint(min_dimension//12, min_dimension//9+1)
 	x_axis = {'min': size, 'max': width-size}
 	y_axis = {'min': size, 'max': height-size}
 	num_of_crops = 0
@@ -162,9 +176,18 @@ client = discord.Client()
 
 @bot.event
 async def on_ready():
-    print(
-        f'{bot.user.name} is connected'
-    )
+	global not_seen_pokemon
+	global MAX_POKEDEX_INDEX
+
+	reset_guessed_pokemon()
+
+	print(f'{bot.user.name} is connected')
+
+
+@bot.command(name='reset')
+async def reset_guessed(ctx):
+	reset_guessed_pokemon()
+	await ctx.send('{} reseting all guessed Pokemon'.format(ctx.message.author.mention))
 
 
 @bot.command(name='again')
