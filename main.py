@@ -1,5 +1,5 @@
 import os
-from numpy import uint8, arange, delete
+from numpy import uint8, arange, delete, clip
 from numpy.random import randint, choice
 # this import is for image cropping
 from PIL import Image
@@ -11,8 +11,10 @@ import requests
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+import matplotlib.pyplot as plt
 # from threading import Timer
 # from throttler import throttle
+import numpy as np
 
 
 POKEMON_URL = 'https://pokeapi.co/api/v2/pokemon/'
@@ -132,6 +134,36 @@ def apply_zoom_and_crop(image_url, name):
 	resample_crop_and_zoom()
 
 
+def apply_mosaic_scramble(image_url, name):
+	image = Image.open(requests.get(image_url, stream=True).raw)
+	image.save('pokemon.png')
+
+	f = np.array(image)
+
+	n, m = image.size
+
+	image_size = 475
+	mini_sq = 19
+	ratio = image_size//mini_sq
+	max_loop_iterations = 575
+
+	for iterations in range(max_loop_iterations):
+	    row1 = randint(0, ratio)
+	    col1 = randint(0, ratio)
+	    
+	    #######
+	    
+	    row2 = randint(0, ratio)
+	    col2 = randint(0, ratio)
+	    
+	    for r in range(mini_sq):
+	        for c in range(mini_sq):
+	            f[mini_sq*row1+r, mini_sq*col1+c], f[mini_sq*row2+r, mini_sq*col2+c] =\
+	            	f[mini_sq*row2+r, mini_sq*col2+c], f[mini_sq*row1+r, mini_sq*col1+c]
+
+	g = Image.fromarray(f).save('whos-that-pokemon.png')
+
+
 def get_new_pokemon():
 	global pokemon_name
 	global generation
@@ -159,13 +191,16 @@ def get_new_pokemon():
 		types.append(t['type']['name'].title())
 	
 
-	action = choice([True, False])
-	if action:
+	action = choice([1, 2, 3])
+	if action == 1:
 		is_crop_mode = True
 		apply_zoom_and_crop(image_url, name)
-	else:
+	elif action == 2:
 		is_crop_mode = False
 		apply_gaussian_blur(image_url, name)
+	elif action == 3:
+		is_crop_mode = False
+		apply_mosaic_scramble(image_url, name)
 
 	
 load_dotenv()
