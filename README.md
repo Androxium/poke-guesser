@@ -1,7 +1,6 @@
 # Poke-Guesser
 
-This is a discord bot that will generate random images of Pokemon and players have to correctly guess the name of that\
-pokemone. This bot makes use of the pokeapi (check them out [here](https://pokeapi.co/)) to make GET requests to for the pokemon images.
+This is a discord bot that will generate random images of Pokemon and players have to correctly guess the name of that Pokemon. This bot makes use of the pokeapi (check them out [here](https://pokeapi.co/)) to make GET requests to for the pokemon images.
 
 
 ## Dependencies
